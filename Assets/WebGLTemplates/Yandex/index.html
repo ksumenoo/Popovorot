@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes">
+  <title>{{{ PRODUCT_NAME }}}</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0b0b10; }
+    #unity-canvas { position: fixed; left: 0; top: 0; width: 100%; height: 100%; display: block; background: #0b0b10; outline: none; }
+    #loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+              gap: 16px; color: #fff; font: 600 18px/1.2 Arial, sans-serif; letter-spacing: 0.04em; }
+    #bar { width: 280px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; }
+    #fill { width: 0; height: 100%; background: #ffcc40; transition: width 0.2s; }
+  </style>
+  <!-- SDK Яндекс Игр: на площадке файл отдаётся по этому адресу; локально его нет, и игра работает без SDK -->
+  <script src="/sdk.js"></script>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <div id="loader"><div>ВОТ ЭТО ПОПОВОРОТ</div><div id="bar"><div id="fill"></div></div></div>
+  <script>
+    // ----- SDK -----
+    window.ysdkReady = (typeof YaGames !== 'undefined' ? YaGames.init() : Promise.resolve(null))
+      .catch(function (e) { console.warn('YaGames.init', e); return null; });
+    window.yaPlayerReady = window.ysdkReady.then(function (ysdk) {
+      return ysdk ? ysdk.getPlayer().catch(function (e) { console.warn('getPlayer', e); return null; }) : null;
+    });
+
+    function sendToUnity(method) {
+      if (window.unityInstance) window.unityInstance.SendMessage('YandexBridge', method);
+    }
+    window.ysdkReady.then(function (ysdk) {
+      if (!ysdk) return;
+      ysdk.on('game_api_pause', function () { sendToUnity('OnPlatformPause'); });
+      ysdk.on('game_api_resume', function () { sendToUnity('OnPlatformResume'); });
+    });
+    // Свёрнутая вкладка: игра и звук на паузе.
+    document.addEventListener('visibilitychange', function () {
+      sendToUnity(document.hidden ? 'OnPlatformPause' : 'OnPlatformResume');
+    });
+
+    // Без прокрутки страницы, контекстного меню и жестов браузера.
+    window.addEventListener('keydown', function (e) {
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].indexOf(e.code) >= 0) e.preventDefault();
+    });
+    document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+    document.addEventListener('wheel', function (e) { e.preventDefault(); }, { passive: false });
+
+    // ----- Unity -----
+    var canvas = document.querySelector('#unity-canvas');
+    var buildUrl = 'Build';
+    var loaderUrl = buildUrl + '/{{{ LOADER_FILENAME }}}';
+    var config = {
+      arguments: [],
+      dataUrl: buildUrl + '/{{{ DATA_FILENAME }}}',
+      frameworkUrl: buildUrl + '/{{{ FRAMEWORK_FILENAME }}}',
+#if USE_THREADS
+      workerUrl: buildUrl + '/{{{ WORKER_FILENAME }}}',
+#endif
+#if USE_WASM
+      codeUrl: buildUrl + '/{{{ CODE_FILENAME }}}',
+#endif
+#if MEMORY_FILENAME
+      memoryUrl: buildUrl + '/{{{ MEMORY_FILENAME }}}',
+#endif
+#if SYMBOLS_FILENAME
+      symbolsUrl: buildUrl + '/{{{ SYMBOLS_FILENAME }}}',
+#endif
+      streamingAssetsUrl: 'StreamingAssets',
+      companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+      productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+      productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+      // Чёткая картинка без лишней нагрузки на экранах с высокой плотностью.
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+      showBanner: function (msg, type) { if (type === 'error') console.error(msg); else console.warn(msg); },
+    };
+
+    var script = document.createElement('script');
+    script.src = loaderUrl;
+    script.onload = function () {
+      createUnityInstance(canvas, config, function (progress) {
+        document.querySelector('#fill').style.width = (100 * progress) + '%';
+      }).then(function (instance) {
+        window.unityInstance = instance;
+        document.querySelector('#loader').style.display = 'none';
+        canvas.focus();
+      }).catch(function (message) { console.error(message); });
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>
